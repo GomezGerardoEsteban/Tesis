@@ -1,0 +1,128 @@
+#################################################################################################################################################
+# Titulo: Evolución esperada de la capacidad instalada por fuente                                                                               #
+# Tema: Gráfico del cambio esperado en la capacidad instalada                                                                                   # 
+#         según proyectos inscriptos y aprobados por la UPME                                                                                    #
+# Author: Gerardo Esteban Gomez-Santiago                                                                                                        #
+# Fecha: 1 de Julio de 2023                                                                                                                     #
+# Documento Oficial: https://www1.upme.gov.co/siel/Seguimiento_proyectos_generacion/Informe_avance_proyectos_generacion_Diciembre_2023.pdf      #
+#################################################################################################################################################
+
+
+rm(list = ls())
+
+library(tidyverse)
+
+base_cambio <- read.csv(file = "rmd/bases/cambio_esperado_capacidad_Instalada.csv")
+
+base_cambio <- base_cambio %>% 
+  mutate(categorica = ifelse(combustible %in% c("Gas", "Petróleo", "Carbón"), "Fósil", combustible))
+
+base_cambio2 <- base_cambio %>% 
+  group_by(categorica) %>% 
+  summarise(total = sum(total),
+            futura = sum(futura))
+
+cambio_generacion <- base_cambio2 %>% 
+  gather(key = momento, value = valor, 2:3)
+
+cambio_generacion <- cambio_generacion %>% 
+  mutate(categorica = factor(categorica, labels = c("Solar","Eólica","Bioenergía","Fósil","Hidroeléctrica"),
+                         levels = c("Solar","Eólica","Bioenergía","Fósil","Hidroeléctrica")))
+
+cambio_generacion <- cambio_generacion %>% 
+  group_by(momento) %>% 
+  mutate(prop = valor/sum(valor)*100)
+
+cambio_generacion <- cambio_generacion %>% 
+  mutate(etiqueta = str_c(categorica, round(prop, 2), "%", sep = " "),
+         etiqueta2 = str_c(round(valor, 1), "MW", sep = " "),
+         tipos = case_when(
+           categorica == "Bioenergía" ~ "FNCER",
+           categorica == "Solar"   ~ "FNCER",
+           categorica == "Eólica"  ~ "FNCER",
+           categorica == "Fósil"   ~ "Fósil",
+           categorica == "Hidroeléctrica" ~ "Hidroeléctrica"
+         )) %>% 
+  mutate(tipos = factor(tipos, levels = c("FNCER", "Fósil", "Hidroeléctrica"),
+                        labels = c("FNCER", "Fósil", "Hidroeléctrica")),
+         momento = factor(momento, levels = c("total", "futura"),
+                          labels = c("total", "futura")))
+
+etiquetas <- cambio_generacion %>% 
+  select(categorica, momento, etiqueta, valor, tipos) %>% 
+  mutate(etiqueta = ifelse(momento == "total" & categorica %in% c("Bioenergía",
+                                                               # "Fósil",
+                                                               "Solar",
+                                                               "Eólica"), NA, 
+                           ifelse(momento == "futura" & categorica %in% c("Bioenergía"), NA, etiqueta)))
+
+etiquetas2 <- cambio_generacion %>% 
+  select(categorica, momento, etiqueta2, valor, tipos) %>% 
+  mutate(etiqueta = ifelse(momento == "total" & categorica %in% c("Bioenergía",
+                                                                  # "Fósil",
+                                                                  "Solar",
+                                                                  "Eólica"), NA, 
+                           ifelse(momento == "futura" & categorica %in% c("Bioenergía"), NA, etiqueta2)))
+
+alpha_max <- 1
+alpha_min <- 0.6
+alpha_vals <- c(
+  seq(alpha_max, alpha_min, length.out = 3), 
+  alpha_max,
+  alpha_max)
+
+cambio_generacion %>% 
+  group_by(momento, tipos) %>% 
+  summarise(suma = sum(prop))
+
+cg <- cambio_generacion %>% 
+  ggplot(mapping = aes(x = momento, y = valor, fill = tipos, alpha = categorica)) +
+  geom_col(col = "white", width = 1, show.legend = F) +
+  geom_text(data = etiquetas,
+    aes(x = momento, y = valor, label = etiqueta),
+    position = position_stack(vjust = 0.70),
+    col = 'white',
+    size = 2.5,
+    fontface = 'bold',
+    show.legend = F
+  ) +
+  geom_text(data = etiquetas2,
+            aes(x = momento, y = valor, label = etiqueta),
+            position = position_stack(vjust = 0.50),
+            col = 'white',
+            size = 3,
+            fontface = 'bold',
+            show.legend = F
+  ) +
+  # geom_text(mapping = aes(x = categoria, y = valor, label = sum(valor))) +
+  scale_fill_manual(values = c( "#249206","#000000","#3667A6")) +
+  scale_alpha_manual(values = alpha_vals) +
+  annotate(geom = "text",
+           x = c(1,2),
+           y = c(21500, 44000),
+           label = c("20 GW", "42.3 GW")) +
+  labs(title = "Evolución esperada de la capacidad instalada por fuente",
+       x = NULL,
+       y = "Megavativos (MW)",
+       caption = "Fuente: Elaboración propia en base a UPME y XM") +
+  scale_x_discrete(labels = c("2023", "2032")) +
+  scale_y_continuous(n.breaks = 10) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 9),
+        plot.subtitle = element_text(hjust = 0.0, size = 7),
+        plot.caption = element_text(size=8, hjust=0.0, face="italic", color="black"),
+        axis.text.x = element_text(size = 8, angle = 0),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 9),
+        axis.title.x = element_text(size = 7),
+        legend.title = element_text(size=7, hjust = 0.5), 
+        legend.text = element_text(size=6),
+        legend.position = "none")
+
+ggsave(plot = cg, 
+       filename = "rmd/resultados/graficos/grafico1_evolucion_capacidad2.png", 
+       dpi = 500,
+       width =  4.69,
+       height = 5.45
+      )
+
