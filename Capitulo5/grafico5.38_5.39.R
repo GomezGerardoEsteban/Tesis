@@ -127,19 +127,6 @@ for(i in 1:7){
   
 }
 
-## Definición de modelo de Oferta
-
-modeloOferta_IO <- function(x){
-  
-  cambio_x <- t(m_io$G) %*% as.matrix(x)
-  
-  estimado_io <- tibble(sector = m_io$RS_label[,2],
-                        producto_2019 = m_io$X,
-                        var_producto = cambio_x,
-                        var_porc = (var_producto + producto_2019)/producto_2019 - 1)
-  return(estimado_io)
-  
-}
 
 ### PIB
 
@@ -211,7 +198,7 @@ pib_sectores_ts_ <- data.matrix(pib_sectores_ts[,2:60])
 pib_sectores_ts_ <- ts(data = pib_sectores_ts_, start = 2005, frequency = 1)
 
 nombres_sectores <- names(pib_sectores_ts[,2:60])
-
+                      
 # Caclulo de las tasas de crecimiento anual que los diferentes sectores económicos registraron
 # entre 2005 y 2019
 
@@ -396,25 +383,26 @@ for(i in 1:1000){
   
 }
 
-guardado <- guardado %>% bind_cols()
+aplicacion_matriz_c <- list()             
 
-guardado <- as.matrix(guardado)
-
-crecimientos_c <- list()                  # Almaceno crecimientos
-aplicacion_matriz_c <- list()             # Almaceno las aplicaciones de la matriz
-for(i in 1:27000){
+for(i in 1:1000){
   
-  crecimientos_c[[i]] <- pib_sectores %>% 
-    select(Nombre, year, produccion_constante) %>% 
-    filter(year == 2019) %>% 
-    mutate(tasa = guardado[,i],
-           produccion_2032 = produccion_constante*(1+tasa)^(2032-2019),
-           variacion_produccion = produccion_2032 - produccion_constante)
+  aplicacion_matriz_c[[i]] <- map(.x = 1:27, .f = ~{
+    
+    p <- pib_sectores %>% 
+      select(Nombre, year, produccion_constante) %>% 
+      filter(year == 2019) %>% 
+      mutate(tasa = guardado[[i]][[.x]],
+             produccion_2032 = produccion_constante*(1+tasa)^(2032-2019),
+             variacion_produccion = produccion_2032 - produccion_constante)
+    
+    p$variacion_produccion[34] <- 0
+    
+    q <- modeloOferta_IO(p$variacion_produccion)
+    
+    return(q)
   
-  crecimientos_c[[i]]$variacion_produccion <- ifelse(crecimientos_c[[i]]$Nombre == "Electricidad", 0, crecimientos_c[[i]]$variacion_produccion)
-  
-  
-  aplicacion_matriz_c[[i]] <- modeloOferta_IO(crecimientos_c[[i]][,6])
+  })  
   
 }
 
@@ -422,10 +410,11 @@ aplicacion_matriz_c <- aplicacion_matriz_c %>% bind_rows()
 
 aplicacion_matriz_c <- aplicacion_matriz_c %>% 
   mutate(indicador_primario = rep(c(rep(1,59), rep(2,59), rep(3,59)), 9000),
-         indicador_secundario = rep(c(rep(1,59*3), rep(2,59*3), rep(3,59*3)), 3000),
-         indicador_terciario = rep(c(rep(1,59*9), rep(2,59*9), rep(3,59*9)), 1000))
+       indicador_secundario = rep(c(rep(1,59*3), rep(2,59*3), rep(3,59*3)), 3000),
+       indicador_terciario = rep(c(rep(1,59*9), rep(2,59*9), rep(3,59*9)), 1000))
 
-histagramas <- aplicacion_matriz_c[aplicacion_matriz_c$sector=="Electricidad", ]
+
+histagramas <- aplicacion_matriz_c[aplicacion_matriz_c$sector == "Electricidad", ]
 
 histagramas$ref <- "open"
 
@@ -555,8 +544,6 @@ n_sectores <- tasas_2019_2005 %>%
   select(n) %>% 
   pull()
 
-
-
 # Tasas de crecimiento teóricas
 
 t_teoricas <- c(0.01, 0.03, 0.06)
@@ -629,12 +616,7 @@ for(i in 1:1000){
   
 }
 
-guardado <- guardado %>% bind_cols()
-
-guardado <- as.matrix(guardado)
-
-
-modeloOferta_IO <- function(x){
+modeloOferta_IO_closed <- function(x){
   
   cambio_x <- t(m_io_closed$G) %*% as.matrix(x)
   
@@ -646,20 +628,27 @@ modeloOferta_IO <- function(x){
   
 }
 
-crecimientos_closed <- list()                  # Almaceno crecimientos
-aplicacion_matriz_closed <- list()             # Almaceno las aplicaciones de la matriz
-for(i in 1:27000){
+
+
+aplicacion_matriz_closed <- list()             
+
+for(i in 1:1000){
   
-  crecimientos_closed[[i]] <- tasas_2019_2005 %>%  
-    select(sector, VA_inicial) %>% 
-    mutate(tasa = guardado[,i],
-           produccion_2032 = VA_inicial*(1+tasa)^(2032-2019),
-           variacion_produccion = produccion_2032 - VA_inicial)
-  
-  crecimientos_closed[[i]]$variacion_produccion <- ifelse(crecimientos_closed[[i]]$sector == "Electricidad", 0, crecimientos_closed[[i]]$variacion_produccion)
-  
-  
-  aplicacion_matriz_closed[[i]] <- modeloOferta_IO(crecimientos_closed[[i]][,5])
+  aplicacion_matriz_closed[[i]] <- map(.x = 1:27, .f = ~{
+    
+    p <- tasas_2019_2005 %>%  
+      select(sector, VA_inicial) %>% 
+      mutate(tasa = guardado[[i]][[.x]],
+             produccion_2032 = VA_inicial*(1+tasa)^(2032-2019),
+             variacion_produccion = produccion_2032 - VA_inicial)
+    
+    p$variacion_produccion[34] <- 0
+    
+    q <- modeloOferta_IO_closed(p$variacion_produccion)
+    
+    return(q)
+    
+  })  
   
 }
 
@@ -669,6 +658,7 @@ aplicacion_matriz_closed <- aplicacion_matriz_closed %>%
   mutate(indicador_primario = rep(c(rep(1,59), rep(2,59), rep(3,59)), 9000),
          indicador_secundario = rep(c(rep(1,59*3), rep(2,59*3), rep(3,59*3)), 3000),
          indicador_terciario = rep(c(rep(1,59*9), rep(2,59*9), rep(3,59*9)), 1000))
+
 
 histagramas_closed <- aplicacion_matriz_closed[aplicacion_matriz_closed$sector=="Electricidad", ]
 
@@ -762,20 +752,6 @@ n_sectores_int_elec <- baseAna_intElec %>%
   select(n) %>% 
   pull()
 
-
-modeloOferta_IO <- function(x){
-  
-  cambio_x <- t(m_io$G) %*% as.matrix(x)
-  
-  estimado_io <- tibble(sector = m_io$RS_label[,2],
-                        producto_2019 = m_io$X,
-                        var_producto = cambio_x,
-                        var_porc = (var_producto + producto_2019)/producto_2019 - 1)
-  return(estimado_io)
-  
-}
-
-
 cont_1 <- list()
 cont_2 <- list()
 
@@ -837,25 +813,27 @@ for(i in 1:1000){
   
 }
 
-guardado_ <- guardado_ %>% bind_cols()
 
-guardado_ <- as.matrix(guardado_)
-
-crecimientos_ce <- list()                  # Almaceno crecimientos
 aplicacion_matriz_ce <- list()             # Almaceno las aplicaciones de la matriz
-for(i in 1:9000){
+
+for(i in 1:1000){
   
-  crecimientos_ce[[i]] <- pib_sectores %>% 
-    select(Nombre, year, produccion_constante) %>% 
-    filter(year == 2019) %>% 
-    mutate(tasa = guardado_[,i],
-           produccion_2032 = produccion_constante*(1+tasa)^(2032-2019),
-           variacion_produccion = produccion_2032 - produccion_constante)
-  
-  crecimientos_ce[[i]]$variacion_produccion <- ifelse(crecimientos_ce[[i]]$Nombre == "Electricidad", 0, crecimientos_ce[[i]]$variacion_produccion)
-  
-  
-  aplicacion_matriz_ce[[i]] <- modeloOferta_IO(crecimientos_ce[[i]][,6])
+  aplicacion_matriz_ce[[i]] <- map(.x = 1:9, .f = ~{
+    
+    p <- pib_sectores %>% 
+      select(Nombre, year, produccion_constante) %>% 
+      filter(year == 2019) %>% 
+      mutate(tasa = guardado_[[i]][[.x]],
+             produccion_2032 = produccion_constante*(1+tasa)^(2032-2019),
+             variacion_produccion = produccion_2032 - produccion_constante)
+    
+    p$variacion_produccion[34] <- 0
+    
+    q <- modeloOferta_IO(p$variacion_produccion)
+    
+    return(q)
+    
+  })
   
 }
 
@@ -888,18 +866,6 @@ n_sectores_int_elec <- baseAna_intElec %>%
   tally() %>% 
   select(n) %>% 
   pull()
-
-modeloOferta_IO <- function(x){
-  
-  cambio_x <- t(m_io_closed$G) %*% as.matrix(x)
-  
-  estimado_io <- tibble(sector = m_io_closed$RS_label[,2],
-                        producto_2019 = m_io_closed$X,
-                        var_producto = cambio_x,
-                        var_porc = (var_producto + producto_2019)/producto_2019 - 1)
-  return(estimado_io)
-  
-}
 
 cont_1 <- list()
 cont_2 <- list()
@@ -964,25 +930,27 @@ for(i in 1:1000){
   
 }
 
-guardado_ <- guardado_ %>% bind_cols()
-
-guardado_ <- as.matrix(guardado_)
-
-crecimientos_ce_closed <- list()                  # Almaceno crecimientos
 aplicacion_matriz_ce_closed <- list()             # Almaceno las aplicaciones de la matriz
-for(i in 1:9000){
+
+for(i in 1:1000){
   
-  crecimientos_ce_closed[[i]] <- tasas_2019_2005 %>%  
-    select(sector, VA_inicial) %>% 
-    mutate(tasa = guardado_[,i],
-           produccion_2032 = VA_inicial*(1+tasa)^(2032-2019),
-           variacion_produccion = produccion_2032 - VA_inicial)
+  aplicacion_matriz_ce_closed[[i]] <- map(.x = 1:9, .f = ~{
+    
+    
+    p <- tasas_2019_2005 %>%  
+      select(sector, VA_inicial) %>% 
+      mutate(tasa = guardado_[[i]][[.x]],
+             produccion_2032 = VA_inicial*(1+tasa)^(2032-2019),
+             variacion_produccion = produccion_2032 - VA_inicial)
+    
+    p$variacion_produccion[34] <- 0
+    
+    q <- modeloOferta_IO_closed(p$variacion_produccion)
   
-  crecimientos_ce_closed[[i]]$variacion_produccion <- ifelse(crecimientos_ce_closed[[i]]$sector == "Electricidad", 0, crecimientos_ce_closed[[i]]$variacion_produccion)
-  
-  
-  aplicacion_matriz_ce_closed[[i]] <- modeloOferta_IO(crecimientos_ce_closed[[i]][,5])
-  
+    return(q)
+    
+  })
+    
 }
 
 aplicacion_matriz_ce_closed <- aplicacion_matriz_ce_closed %>% bind_rows()
@@ -1044,6 +1012,5 @@ ggsave(filename = "rmd/resultados/graficos/grafico5.39_histogramas_esc_3_int.png
        width = 7.4,
        height = 5.81,
        dpi = 500)
-
 
 
