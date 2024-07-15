@@ -12,7 +12,11 @@
 #
 #              Ambas preguntas se contestan utilizando el modelo de oferta abierto y cerrado con respecto
 #              a los hogares.
-#               
+#
+# Bases a utilizar: Para este ejercicio se utilizan tres bases:
+#                   **matrix_IO_2019.xlsx** que contiene la matriz IP
+#                   **1.2.5.IPC_Serie_variaciones (1).csv** la cual tiene el indice de precios para actualizar los valores a 2022
+#                   **agregados_macro_59_sectores.xlsx** que contiene las series de producción para cada uno de los sectores entre 2005 y 2022
 ######################################################################################################
 
 rm(list = ls())
@@ -129,7 +133,7 @@ for(i in 1:7){
 # Sabemos que al 0.06 no alcanza, hagamos una secuencia del 0.06 hasta el 0.15 y veamos si 
 # en ese intervalo se alcanza el umbral.
 
-tasas <- seq(0.06, 0.20, 0.01)
+tasas <- seq(0.01, 0.20, 0.01)
 
 ## Definición de modelo de Oferta
 
@@ -196,7 +200,7 @@ pib_sectores_2019 <- pib_sectores[pib_sectores$year == 2019, ]
 # eléctrica en 2032?
 
 # Definicion de tasas posibles
-tasas <- seq(0.06, 0.3, 0.01)
+tasas <- seq(0.01, 0.3, 0.01)
 
 # Aplicación de tasas al vector de producción
 aplicacion_tasas <- list()
@@ -237,9 +241,7 @@ sector_electrico <- sector_electrico %>% bind_rows()
 # Añadimos tasa aplicada para identificar valores
 sector_electrico$tasas_eqAn <- tasas
 
-
-
-
+sector_electrico$id <- "open"
 
 
 # Teniendo en cuenta que las tasas para alcanzar el umbral del 107% se encuentran entre el
@@ -339,6 +341,7 @@ aplicacion_anios %>%
 aplicacion_anios %>% 
   filter(tasas == 0.06 & var_porc >= 1.0) # 2045
 
+aplicacion_anios$id <- 'Modelo Abierto'
 
 # Mismo analisis con modelo cerrado ----------------------------------------
 
@@ -437,7 +440,7 @@ modeloOferta_IO_closed <- function(x){
 
 # Aplicación de crecimientos en modelo cerrado
 
-tasas <- seq(0.01,0.2,0.01)
+tasas <- seq(0.01,0.3,0.01)
 
 # Aplicación de tasas al vector de producción
 aplicacion_tasas_closed <- list()
@@ -477,6 +480,9 @@ sector_electrico_closed <- sector_electrico_closed %>% bind_rows()
 
 # Añadimos tasa aplicada para identificar valores
 sector_electrico_closed$tasas_eqAn <- tasas
+
+sector_electrico_closed$id <- 'closed'
+
 
 # Teniendo en cuenta que las tasas para alcanzar el umbral del 107% se encuentran entre el
 # 11 y 12 por ciento anual, desagregamos las tasas entre esos dos valores para ver con mayor
@@ -567,3 +573,200 @@ aplicacion_anios_closed %>%
 aplicacion_anios_closed %>% 
   filter(tasas == 0.06 & var_porc >= 1.0) # 2042
 
+
+aplicacion_anios_closed$id <- "Modelo Cerrado"
+
+# Graficas ----------------------------------------------------------------
+
+grafica_1 <- rbind(sector_electrico, sector_electrico_closed)
+
+se_um <- rbind(sector_electrico_um, sector_electrico_um_cl)
+
+se_um %>% 
+  filter(var_porc > 1.069 & var_porc < 1.08)
+
+grafica_tasa_requerida <- grafica_1 %>% 
+  ggplot() +
+  geom_line(mapping = aes(x = tasas_eqAn, 
+                          y = var_porc*100, 
+                          color = id),
+            show.legend = F) +
+  scale_x_continuous(limits = c(0.0, 0.15),
+                     breaks = seq(0,0.15,0.01)) +
+  scale_y_continuous(limits = c(0.0, 1.3)*100,
+                     n.breaks = 10) +
+  scale_color_manual(values = c("darkred", "darkblue")) +
+  geom_hline(mapping = aes(yintercept = 107), linetype = 'dashed', color = 'darkgreen', alpha = 0.7) +
+  annotate(geom = 'text',
+           x = 0.02,
+           y = 112,
+           label = "Umbral del 107%",
+           size = 4,
+           color = 'darkgreen')  +
+  geom_point(mapping = aes(x = 0.1125, y = 107), 
+             shape = 15,
+             color = "darkred") +
+  geom_segment(mapping = aes(x = 0.1125, y = 107,
+                             xend = 0.1125, yend = 125),
+               color = "darkred",
+               linetype = 'dotdash') +
+  geom_point(mapping = aes(x = 0.127, y = 107), 
+             shape = 15,
+             color = "darkblue") +
+  geom_segment(mapping = aes(x = 0.127, y = 107,
+                             xend = 0.127, yend = 125),
+               color = "darkblue",
+               linetype = 'dotdash') +
+  annotate(geom = 'text',
+           x = c(0.1125, 0.127),
+           y = c(130,130),
+           label = c("11.2%","12.7%"),
+           color = c("darkred", "darkblue"),
+           size = 3) +
+  labs(title = "Relación entre la tasa de crecimiento económico y el crecimiento\ndel sector eléctrico al 2032, según la matriz IP de 2019",
+       subtitle = "Estimaciones con <span style='color:darkblue;'>modelo abierto</span> y <span style='color:darkred;'>modelo cerrado</span>",
+       x = "Tasas de crecimiento equivalente anual",
+       y = "Crecimiento requerido al sector elécrico",
+       caption = "Fuente: Elaboración propia en base al DANE") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 11),
+        plot.subtitle = element_markdown(hjust = 0.0, size = 9, face = "italic"),
+        plot.caption = element_text(size=8, hjust=1, face="italic", color="black"),
+        axis.text.x = element_text(size = 8, angle = 0),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 9),
+        axis.title.x = element_text(size = 9),
+        legend.title = element_text(size=7, hjust = 0.5), 
+        legend.text = element_text(size=6),
+        legend.position = "none")
+
+
+ggsave(filename = "rmd/resultados/graficos/grafica5.40_tasaRequerida.png",
+       plot = grafica_tasa_requerida,
+       width = 8.52,
+       height = 4.8,
+       dpi = 500)  
+  
+  
+grafica_2 <- rbind(aplicacion_anios, aplicacion_anios_closed)  
+
+grafica_2$iden <- ifelse(grafica_2$tasas == 0.03, "Tasa del 3% anual",
+                        ifelse(grafica_2$tasas == 0.06, "Tasa del 6% anual", "Tasa del 1% anual"))
+
+grafica2.1 <- grafica_2 %>% 
+  filter(tasas == 0.03) %>% 
+  ggplot() +
+  geom_line(mapping = aes(x = anios, y = var_porc*100, color = as.factor(id), 
+                          ),
+            show.legend = F) +
+  scale_x_continuous(limits = c(2032, 2080),
+                     breaks = seq(2032, 2080, 4)) +
+  scale_y_continuous(limits = c(0, 130),
+                     n.breaks = 10) +
+  scale_color_manual(values = c("midnightblue", "orangered4")) +
+  geom_hline(mapping = aes(yintercept = 107), linetype = 'dashed', color = 'darkgreen', alpha = 0.7) +
+  annotate(geom = 'text',
+           x = 2040,
+           y = 112,
+           label = "Umbral del 107%",
+           size = 3,
+           color = 'darkgreen')  +
+  geom_point(mapping = aes(x = 2071.6, y = 107),
+             color = "darkblue",
+             shape = 15) +
+  geom_segment(mapping = aes(x = 2071.6, y = 107,
+                             xend = 2071.6, yend = 125),
+               color = "darkblue",
+               linetype = 'dotdash') +
+  geom_point(mapping = aes(x = 2065.9, y = 107),
+             color = "darkred",
+             shape = 15) +
+  geom_segment(mapping = aes(x = 2065.9, y = 107,
+                             xend = 2065.9, yend = 125),
+               color = "darkred",
+               linetype = 'dotdash') +
+  annotate(geom = 'text',
+           x = c(2065.9, 2071.6),
+           y = c(130,130),
+           label = c("2066","2072"),
+           color = c("darkred", "darkblue"),
+           size = 3) +
+  facet_grid(~iden)+
+  labs(title = "Año en que se utilizaría la capacidad instalada con tasas de crecimiento\nequivalente anual del 3% y el 6%",
+       subtitle = "Estimaciones con <span style='color:darkblue;'>modelo abierto</span> y <span style='color:darkred;'>modelo cerrado</span>",
+       x = NULL,
+       y = "% de crecimiento del Sector Elétrico") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 11),
+        plot.subtitle = element_markdown(hjust = 0.0, size = 9, face = "italic"),
+        plot.caption = element_text(size=8, hjust=1, face="italic", color="black"),
+        axis.text.x = element_text(size = 8, angle = 60, vjust = 0.5),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 9),
+        axis.title.x = element_text(size = 9),
+        legend.title = element_text(size=7, hjust = 0.5), 
+        legend.text = element_text(size=6),
+        legend.position = "none")
+
+grafica2.2 <- grafica_2 %>% 
+  filter(tasas == 0.06) %>% 
+  ggplot() +
+  geom_line(mapping = aes(x = anios, y = var_porc*100, color = as.factor(id), 
+  ),
+  show.legend = F) +
+  scale_x_continuous(limits = c(2032, 2050),
+                     breaks = seq(2030, 2050, 1)) +
+  scale_y_continuous(limits = c(0, 130),
+                     n.breaks = 10) +
+  scale_color_manual(values = c("midnightblue", "orangered4")) +
+  geom_hline(mapping = aes(yintercept = 107), linetype = 'dashed', color = 'darkgreen', alpha = 0.7) +
+  annotate(geom = 'text',
+           x = 2035,
+           y = 112,
+           label = "Umbral del 107%",
+           size = 3,
+           color = 'darkgreen')  +
+  geom_point(mapping = aes(x = 2045.7, y = 107),
+             color = "darkblue",
+             shape = 15) +
+  geom_segment(mapping = aes(x = 2045.7, y = 107,
+                             xend = 2045.7, yend = 125),
+               color = "darkblue",
+               linetype = 'dotdash') +
+  geom_point(mapping = aes(x = 2042.8, y = 107),
+             color = "darkred",
+             shape = 15) +
+  geom_segment(mapping = aes(x = 2042.8, y = 107,
+                             xend = 2042.8, yend = 125),
+               color = "darkred",
+               linetype = 'dotdash') +
+  annotate(geom = 'text',
+           x = c(2042.8, 2045.7),
+           y = c(130,130),
+           label = c("2043","2046"),
+           color = c("darkred", "darkblue"),
+           size = 3) +
+  facet_grid(~iden)+
+  labs(x = NULL,
+       y = "% de crecimiento del Sector Elétrico") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, size = 11),
+        plot.subtitle = element_markdown(hjust = 0.0, size = 9, face = "italic"),
+        plot.caption = element_text(size=8, hjust=1, face="italic", color="black"),
+        axis.text.x = element_text(size = 8, angle = 60, vjust = 0.5),
+        axis.text.y = element_text(size = 8),
+        axis.title.y = element_text(size = 9),
+        axis.title.x = element_text(size = 9),
+        legend.title = element_text(size=7, hjust = 0.5), 
+        legend.text = element_text(size=6),
+        legend.position = "none")
+
+grafica_2_ <- grafica2.1/grafica2.2
+
+grafica_2_
+
+ggsave(filename = "rmd/resultados/graficos/grafico5.41_anioUtiliacion.png",
+       plot = grafica_2_,
+       width = 6.51,
+       height = 6.65,
+       dpi = 500)
